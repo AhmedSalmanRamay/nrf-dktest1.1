@@ -32,10 +32,10 @@
 #include <stdlib.h>
  // Include this for generating random numbers
 // Define a UUID for your custom service
-#define BLE_UUID_CUSTOM_SERVICE 0x1234
+#define BLE_UUID_CUSTOM_SERVICE 0x1812
 
 // Define a UUID for the characteristic
-#define BLE_UUID_RANDOM_CHAR 0x5678
+#define BLE_UUID_RANDOM_CHAR 0x2A22
 
 
 #define DEVICE_NAME                     "NRF-DK-TEST"                       
@@ -103,8 +103,8 @@ static void custom_service_init(void)
     // Initialize characteristic metadata
     memset(&char_md, 0, sizeof(char_md));
     char_md.char_props.read   = 1;
-    char_md.char_props.write  = 1;
-    char_md.char_props.notify = 0;
+    char_md.char_props.write  = 0;
+    char_md.char_props.notify = 1;
 
     char_uuid.type = BLE_UUID_TYPE_VENDOR_BEGIN;
     char_uuid.uuid = BLE_UUID_RANDOM_CHAR;
@@ -598,7 +598,7 @@ int main(void)
     peer_manager_init();
 
     
-    NRF_LOG_INFO("Template example started.");
+    NRF_LOG_INFO("dk-test-1.2..");
     application_timers_start();
 
     advertising_start(erase_bonds);
