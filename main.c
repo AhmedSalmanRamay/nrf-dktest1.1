@@ -37,7 +37,6 @@
 // Define a UUID for the characteristic
 #define BLE_UUID_RANDOM_CHAR 0x2A22
 
-
 #define DEVICE_NAME                     "NRF-DK-TEST"                       
 #define MANUFACTURER_NAME               "Nds"                  
 #define APP_ADV_INTERVAL                300                                     
@@ -84,7 +83,7 @@ static ble_custom_service_t m_custom_service;
 static void custom_service_init(void)
 {
     ble_uuid_t        service_uuid;
-    ble_uuid128_t     base_uuid = {BLE_UUID_CUSTOM_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN};
+    ble_uuid_t     base_uuid = {BLE_UUID_HUMAN_INTERFACE_DEVICE_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN};
     uint32_t          err_code;
 
     // Add a custom service
@@ -107,7 +106,7 @@ static void custom_service_init(void)
     char_md.char_props.notify = 1;
 
     char_uuid.type = BLE_UUID_TYPE_VENDOR_BEGIN;
-    char_uuid.uuid = BLE_UUID_RANDOM_CHAR;
+    char_uuid.uuid = 0x2A22;
 
     
 memset(&attr_md, 0, sizeof(attr_md));
@@ -142,8 +141,6 @@ static void send_random_number(void) {
     err_code = sd_ble_gatts_value_set(m_custom_service.random_char_handles.value_handle, sizeof(random_number), random_data);
     APP_ERROR_CHECK(err_code);
 }
-
-
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -511,6 +508,12 @@ static void advertising_init(void)
     init.advdata.uuids_complete.uuid_cnt = sizeof(m_adv_uuids) / sizeof(m_adv_uuids[0]);
     init.advdata.uuids_complete.p_uuids  = m_adv_uuids;
 
+    ble_uuid_t custom_uuid;
+    custom_uuid.uuid = BLE_UUID_CUSTOM_SERVICE;
+    custom_uuid.type = BLE_UUID_TYPE_BLE;
+    init.advdata.uuids_more_available.uuid_cnt = 1;
+    init.advdata.uuids_more_available.p_uuids = &custom_uuid;
+
     init.config.ble_adv_fast_enabled  = true;
     init.config.ble_adv_fast_interval = APP_ADV_INTERVAL;
     init.config.ble_adv_fast_timeout  = APP_ADV_DURATION;
@@ -598,7 +601,7 @@ int main(void)
     peer_manager_init();
 
     
-    NRF_LOG_INFO("dk-test-1.2..");
+    NRF_LOG_INFO("NRF-DK-TEST.");
     application_timers_start();
 
     advertising_start(erase_bonds);
