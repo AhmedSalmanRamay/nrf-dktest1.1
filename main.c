@@ -2,7 +2,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
+#include "boards.h"
+#include <stdlib.h>
+#include "app_util_platform.h"
 
+#include "nrf_drv_twi.h"
 #include "nordic_common.h"
 #include "nrf.h"
 #include "app_error.h"
@@ -25,11 +30,14 @@
 #include "nrf_ble_gatt.h"
 #include "nrf_ble_qwr.h"
 #include "nrf_pwr_mgmt.h"
+#include "nrf_drv_twi.h"
 
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
 #include "nrf_log_default_backends.h"
-#include <stdlib.h>
+
+
+
  // Include this for generating random numbers
 // Define a UUID for your custom service
 #define BLE_UUID_CUSTOM_SERVICE 0x1812
@@ -78,44 +86,40 @@ typedef struct {
 } ble_custom_service_t;
 
 static ble_custom_service_t m_custom_service;
-
+APP_TIMER_DEF(m_update_timer);  // Timer instance
 // Function to initialize the custom service and the random characteristic
-static void custom_service_init(void)
+
+static ble_uuid_t m_adv_uuids[] =                                              
 {
-    ble_uuid_t        service_uuid;
-    ble_uuid_t     base_uuid = {BLE_UUID_HUMAN_INTERFACE_DEVICE_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN};
-    uint32_t          err_code;
+    {BLE_UUID_DEVICE_INFORMATION_SERVICE, BLE_UUID_TYPE_BLE},
+     {BLE_UUID_CUSTOM_SERVICE, BLE_UUID_TYPE_BLE}
 
+   
+};
+
+static void custom_service_init(void) {
     // Add a custom service
-    service_uuid.type = BLE_UUID_TYPE_BLE;
+    ble_uuid_t service_uuid;
     service_uuid.uuid = BLE_UUID_CUSTOM_SERVICE;
+    service_uuid.type = BLE_UUID_TYPE_BLE;
 
-    err_code = sd_ble_gatts_service_add(BLE_GATTS_SRVC_TYPE_PRIMARY, &service_uuid, &m_custom_service.service_handle);
+    uint32_t err_code = sd_ble_gatts_service_add(BLE_GATTS_SRVC_TYPE_PRIMARY, &service_uuid, &m_custom_service.service_handle);
     APP_ERROR_CHECK(err_code);
 
     // Add the random characteristic
     ble_uuid_t char_uuid;
-    ble_gatts_attr_md_t attr_md;
+    char_uuid.uuid = BLE_UUID_RANDOM_CHAR;
+    char_uuid.type = BLE_UUID_TYPE_BLE;
+
     ble_gatts_char_md_t char_md;
-    ble_gatts_attr_t attr_char_value;
-
-    // Initialize characteristic metadata
     memset(&char_md, 0, sizeof(char_md));
-    char_md.char_props.read   = 1;
-    char_md.char_props.write  = 0;
-    char_md.char_props.notify = 1;
+    char_md.char_props.read = 1; // Read property enabled
 
-    char_uuid.type = BLE_UUID_TYPE_VENDOR_BEGIN;
-    char_uuid.uuid = 0x2A22;
+    ble_gatts_attr_md_t attr_md;
+    memset(&attr_md, 0, sizeof(attr_md));
+    BLE_GAP_CONN_SEC_MODE_SET_OPEN(&attr_md.read_perm); // Read permission set to open
 
-    
-memset(&attr_md, 0, sizeof(attr_md));
-BLE_GAP_CONN_SEC_MODE_SET_OPEN(&attr_md.read_perm);
-BLE_GAP_CONN_SEC_MODE_SET_OPEN(&attr_md.write_perm);
-attr_md.vloc = BLE_GATTS_VLOC_STACK;
-
-
-    // Initialize attribute value
+    ble_gatts_attr_t attr_char_value;
     memset(&attr_char_value, 0, sizeof(attr_char_value));
     attr_char_value.p_uuid    = &char_uuid;
     attr_char_value.p_attr_md = &attr_md;
@@ -138,20 +142,26 @@ static void send_random_number(void) {
     uint8_t random_data[sizeof(random_number)];
     memcpy(random_data, &random_number, sizeof(random_number));
 
-    err_code = sd_ble_gatts_value_set(m_custom_service.random_char_handles.value_handle, sizeof(random_number), random_data);
+    err_code = sd_ble_gatts_value_set(m_custom_service.random_char_handles.value_handle, sizeof(random_number), &random_data);
     APP_ERROR_CHECK(err_code);
 }
 
+// Timer callback function to update random data and restart advertising
+static void update_timer_handler(void * p_context)
+{
+    // Update random data
+    send_random_number();
+
+    // Restart advertising
+    ret_code_t err_code = ble_advertising_start(&m_advertising, BLE_ADV_MODE_FAST);
+    APP_ERROR_CHECK(err_code);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
 static uint16_t m_conn_handle = BLE_CONN_HANDLE_INVALID;                       
 
 
-static ble_uuid_t m_adv_uuids[] =                                              
-{
-    {BLE_UUID_DEVICE_INFORMATION_SERVICE, BLE_UUID_TYPE_BLE}
-};
 
 
 static void advertising_start(bool erase_bonds);
@@ -185,7 +195,9 @@ static void timers_init(void)
     ret_code_t err_code = app_timer_init();
     APP_ERROR_CHECK(err_code);
 
-    
+    // Initialize the update timer
+    err_code = app_timer_create(&m_update_timer, APP_TIMER_MODE_REPEATED, update_timer_handler);
+    APP_ERROR_CHECK(err_code);
 }
 
 
@@ -561,7 +573,7 @@ static void power_management_init(void)
 static void idle_state_handle(void)
 {
     if (NRF_LOG_PROCESS() == false)
-    {
+    { 
         nrf_pwr_mgmt_run();
     }
 }
@@ -599,12 +611,16 @@ int main(void)
     services_init();
     conn_params_init();
     peer_manager_init();
-
-    
-    NRF_LOG_INFO("NRF-DK-TEST.");
+custom_service_init();
+    NRF_LOG_INFO("NRF-DK-TEST22.");
     application_timers_start();
+// Start the update timer
+   // Start timers
+    app_timer_init();
+    app_timer_create(&m_update_timer, APP_TIMER_MODE_REPEATED, update_timer_handler);
+    app_timer_start(m_update_timer, APP_TIMER_TICKS(2000), NULL); // Start after 2 seconds
 
-    advertising_start(erase_bonds);
+    advertising_start(false);
 
     
     for (;;)
